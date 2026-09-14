@@ -19,9 +19,9 @@ import requests
 from dotenv import load_dotenv
 
 
-# Streamlit is launched from the frontend directory in some environments, so
-# load the project-level settings explicitly instead of relying on its shell.
-load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+# 로컬 직접 실행에서는 frontend/.env를 사용합니다. Docker Compose에서는
+# env_file로 같은 설정을 주입합니다.
+load_dotenv(Path(__file__).resolve().parent / ".env")
 
 BACKEND_API_URL = os.getenv("BACKEND_API_URL", "http://localhost:8000").rstrip("/")
 USE_MOCK_API = os.getenv("USE_MOCK_API", "true").lower() == "true"

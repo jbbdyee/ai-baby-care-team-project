@@ -9,9 +9,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        # The Care MCP can be launched from the project root or mcp_servers;
-        # always use the shared project settings rather than the working dir.
-        env_file=Path(__file__).resolve().parents[2] / ".env",
+        # Backend와 MCP 서버는 같은 서버 측 설정을 공유합니다.
+        env_file=Path(__file__).resolve().parents[2] / "backend" / ".env",
         env_file_encoding="utf-8",
         extra="ignore",
     )

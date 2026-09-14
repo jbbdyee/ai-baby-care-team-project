@@ -1,0 +1,132 @@
+name: ai-baby-care
+
+x-backend-image: &backend-image
+  image: ${BACKEND_IMAGE:-ghcr.io/jbbdyee/ai-baby-care-backend:latest}
+  pull_policy: always
+  env_file:
+    - backend/.env
+  restart: unless-stopped
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      POSTGRES_DB: ${POSTGRES_DB:-baby_ai}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./mcp_servers/baby_info_server/database/01_schema.sql:/docker-entrypoint-initdb.d/10-rag-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-baby_ai}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  ollama-init:
+    image: ollama/ollama:latest
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    command: ["pull", "nomic-embed-text"]
+    depends_on:
+      ollama:
+        condition: service_healthy
+    restart: "no"
+
+  baby-care-mcp:
+    <<: *backend-image
+    working_dir: /app
+    command: ["python", "-m", "mcp_servers.baby_care_server.server"]
+    environment:
+      MCP_HOST: 0.0.0.0
+      MCP_PORT: 8101
+    volumes:
+      - uploads:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ollama-init:
+        condition: service_completed_successfully
+
+  baby-info-mcp:
+    <<: *backend-image
+    working_dir: /app/mcp_servers/baby_info_server
+    command: ["python", "server.py"]
+    environment:
+      MCP_HOST: 0.0.0.0
+      MCP_PORT: 8102
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ollama-init:
+        condition: service_completed_successfully
+
+  backend:
+    <<: *backend-image
+    ports:
+      - "8000:8000"
+    volumes:
+      - uploads:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      baby-care-mcp:
+        condition: service_started
+      baby-info-mcp:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  frontend:
+    image: ${FRONTEND_IMAGE:-ghcr.io/jbbdyee/ai-baby-care-frontend:latest}
+    pull_policy: always
+    env_file:
+      - frontend/.env
+    ports:
+      - "8501:8501"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  ollama_data:
+  uploads:

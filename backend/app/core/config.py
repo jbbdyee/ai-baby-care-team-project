@@ -6,10 +6,11 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
+BACKEND_ROOT = Path(__file__).resolve().parents[2]
 
-# 프로젝트 루트의 .env 파일을 읽습니다.
-load_dotenv(PROJECT_ROOT / ".env")
+# 로컬 직접 실행에서는 backend/.env를 사용합니다. Docker Compose에서는
+# env_file로 같은 설정을 주입하므로 파일이 없어도 환경변수를 읽을 수 있습니다.
+load_dotenv(BACKEND_ROOT / ".env")
 
 APP_ENV = os.getenv("APP_ENV", "development")
 APP_TIMEZONE = os.getenv("APP_TIMEZONE", "Asia/Seoul")

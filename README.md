@@ -272,7 +272,26 @@ ai-baby-care-team-project/
 
 ## 🚀 Personal Development
 
-아래 내용은 팀 프로젝트 종료 이후 개인적으로 진행하거나 계획한 개선 사항입니다. 팀 프로젝트 당시 구현 범위와 구분하여 기록합니다.
+> 이 섹션부터는 **팀 프로젝트 종료 후 개인적으로 추가한 개선 사항**입니다.
+> 팀 프로젝트 결과물은 Git 태그 `v1.0-team-project`에서 확인할 수 있으며, 원본 팀 저장소와
+> 당시 README는 상단의 Repository Notice 및 Documents 섹션에 별도로 보존했습니다.
+
+팀 프로젝트의 기능과 팀원별 담당 영역은 유지하면서, 실행 환경의 재현성과 향후 배포 가능성을
+높이는 작업을 개인 개발 범위로 진행했습니다.
+
+### 개인 개선 완료 항목
+
+- [x] 루트 공용 환경설정을 Frontend와 Backend의 `.env`로 분리
+- [x] 실제 비밀값을 제외한 서비스별 `.env.example` 제공
+- [x] Backend·Frontend Dockerfile 구성
+- [x] PostgreSQL·Redis·Ollama·두 MCP 서버·Backend·Frontend 통합 Compose 구성
+- [x] 컨테이너 간 서비스 이름 기반 통신과 시작 순서·상태 확인 설정
+- [x] Backend와 Baby Care MCP의 이미지 분석용 임시 파일 volume 공유
+- [x] pgvector 및 RAG 테이블 초기화 연결
+- [x] Registry 이미지 실행용 `compose.release.yml` 구성
+- [x] GitHub Actions를 통한 Backend·Frontend 이미지 자동 빌드 및 GHCR 배포 구성
+
+### 향후 개인 개선 계획
 
 - [ ] Baby Care MCP Server 구조 리팩터링
 - [ ] MCP Tool 테스트 보강
@@ -280,7 +299,69 @@ ai-baby-care-team-project/
 - [ ] RAG 검색 품질 평가
 - [ ] Agent Workflow 개선
 - [ ] LangGraph 기반 Agent Workflow 적용 검토
-- [ ] Docker 기반 실행 환경 구성
+
+### Docker로 전체 실행
+
+실제 API Key가 필요하면 `backend/.env`에 입력합니다. 저장소를 새로 받은 경우에는
+각 예제 파일을 복사해 설정 파일을 만듭니다.
+
+```powershell
+Copy-Item backend/.env.example backend/.env
+Copy-Item frontend/.env.example frontend/.env
+docker compose -f compose.yml config --quiet
+docker compose -f compose.yml up --build -d
+docker compose -f compose.yml ps
+```
+
+첫 실행에서는 Ollama의 `nomic-embed-text` 모델을 내려받기 때문에 시간이 걸릴 수 있습니다.
+
+| 확인 대상 | 주소 |
+| --- | --- |
+| Streamlit | `http://127.0.0.1:8501` |
+| FastAPI 문서 | `http://127.0.0.1:8000/docs` |
+| Backend 상태 | `http://127.0.0.1:8000/health` |
+
+전체 서비스를 종료합니다.
+
+```powershell
+docker compose -f compose.yml down
+```
+
+데이터를 유지하려면 `down -v`를 사용하지 마세요. `-v`를 붙이면 PostgreSQL, Redis,
+Ollama 데이터가 들어 있는 Docker volume도 삭제됩니다.
+
+### 배포 이미지 만들기
+
+`main` 브랜치에 반영된 코드는 GitHub Actions가 Backend와 Frontend 이미지를 빌드해
+GitHub Container Registry(GHCR)에 저장합니다. Pull Request에서는 빌드만 검사하고
+이미지는 올리지 않습니다.
+
+```text
+ghcr.io/jbbdyee/ai-baby-care-backend:latest
+ghcr.io/jbbdyee/ai-baby-care-frontend:latest
+```
+
+`v1.0.0`과 같은 Git 태그를 푸시하면 `1.0.0`, `1.0`, 커밋 SHA 태그도 함께 생성됩니다.
+
+```powershell
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+Registry 이미지를 사용하는 PC에서는 소스를 다시 빌드하지 않고 배포용 Compose를
+실행할 수 있습니다.
+
+```powershell
+Copy-Item backend/.env.example backend/.env
+Copy-Item frontend/.env.example frontend/.env
+docker compose -f compose.release.yml pull
+docker compose -f compose.release.yml up -d
+docker compose -f compose.release.yml ps
+```
+
+GHCR 패키지가 비공개라면 먼저 `docker login ghcr.io`가 필요합니다. 포트폴리오에서
+다른 사람이 바로 실행하게 하려면 GitHub 패키지 설정에서 두 이미지를 공개로 전환합니다.
+실제 API Key가 들어 있는 `.env` 파일은 이미지나 저장소에 포함하지 않습니다.
 
 향후 실제 개선이 완료되면 해당 항목을 체크하고 관련 Issue·PR·구현 내용을 함께 기록할 예정입니다.
 
