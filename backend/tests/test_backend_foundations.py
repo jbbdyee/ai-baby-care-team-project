@@ -136,6 +136,85 @@ def test_chat_sums_explicit_additional_feeding_amounts():
 
 
 @pytest.mark.asyncio
+async def test_chat_sends_formula_feeding_arguments_to_care_mcp(monkeypatch):
+    record_event = AsyncMock(return_value={"success": True, "message": "수유 기록을 저장했습니다."})
+    monkeypatch.setattr(agent_service, "record_care_event", record_event)
+
+    response = await agent_service._handle_care_request(
+        type("Request", (), {
+            "message": "오늘 오전 10시에 분유 120ml 먹었어",
+            "baby_id": "baby-1",
+            "session_id": "session-1",
+        })(),
+        Baby(id="baby-1", user_id="user-1", baby_name="아기", birth_date=date.today(), gender="female", feeding_type="formula", allergies=[]),
+    )
+
+    arguments = record_event.await_args.args[0]
+    assert arguments["event_type"] == "feeding"
+    assert arguments["input_source"] == "text"
+    assert arguments["feeding_type"] == "formula"
+    assert arguments["amount_ml"] == 120
+    assert arguments["idempotency_key"].startswith("chat-session-1-")
+    assert response["response_type"] == "record_confirmation"
+
+
+@pytest.mark.asyncio
+async def test_chat_sends_sleep_end_and_surfaces_missing_start(monkeypatch):
+    record_event = AsyncMock(return_value={
+        "success": False,
+        "message": "종료할 수면 시작 기록이 없습니다.",
+        "error": {"code": "SLEEP_START_NOT_FOUND"},
+    })
+    monkeypatch.setattr(agent_service, "record_care_event", record_event)
+
+    response = await agent_service._handle_care_request(
+        type("Request", (), {
+            "message": "수면 종료로 기록해줘",
+            "baby_id": "baby-1",
+            "session_id": "session-1",
+        })(),
+        Baby(id="baby-1", user_id="user-1", baby_name="아기", birth_date=date.today(), gender="female", feeding_type="formula", allergies=[]),
+    )
+
+    arguments = record_event.await_args.args[0]
+    assert arguments["event_type"] == "sleep"
+    assert arguments["input_source"] == "text"
+    assert arguments["action"] == "end"
+    assert "duration_minutes" not in arguments
+    assert arguments["idempotency_key"].startswith("chat-session-1-")
+    assert response["response_type"] == "clarification_required"
+    assert response["answer"] == "종료할 수면 시작 기록이 없습니다."
+
+
+@pytest.mark.asyncio
+async def test_chat_preserves_negated_diaper_values_and_surfaces_validation(monkeypatch):
+    record_event = AsyncMock(return_value={
+        "success": False,
+        "message": "소변 또는 대변 중 하나 이상을 선택해 주세요.",
+        "error": {"code": "INVALID_CARE_EVENT"},
+    })
+    monkeypatch.setattr(agent_service, "record_care_event", record_event)
+
+    response = await agent_service._handle_care_request(
+        type("Request", (), {
+            "message": "기저귀 기록 저장해줘. 소변도 안 했고 대변도 안 했어.",
+            "baby_id": "baby-1",
+            "session_id": "session-1",
+        })(),
+        Baby(id="baby-1", user_id="user-1", baby_name="아기", birth_date=date.today(), gender="female", feeding_type="formula", allergies=[]),
+    )
+
+    arguments = record_event.await_args.args[0]
+    assert arguments["event_type"] == "diaper"
+    assert arguments["input_source"] == "text"
+    assert arguments["urine"] is False
+    assert arguments["stool"] is False
+    assert arguments["idempotency_key"].startswith("chat-session-1-")
+    assert response["response_type"] == "clarification_required"
+    assert response["answer"] == "소변 또는 대변 중 하나 이상을 선택해 주세요."
+
+
+@pytest.mark.asyncio
 async def test_chat_answers_today_feeding_count_before_attempting_to_record(monkeypatch):
     get_records = AsyncMock(return_value={
         "success": True,

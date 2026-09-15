@@ -309,13 +309,15 @@ def _relative_recorded_at(message: str, *, now: datetime | None = None) -> str |
 
 def _feeding_record(message: str) -> dict | None:
     """Parse bounded text feeding records without restricting amounts to UI presets."""
-    is_feeding_action = any(word in message for word in ("먹었", "먹였", "먹여", "마셨", "수유했", "줬", "주었", "기록해", "기록해줘"))
+    has_feeding_context = any(word in message for word in ("수유", "분유", "모유")) or _extract_amounts_ml(message) is not None
+    is_feeding_action = any(word in message for word in ("먹었", "먹였", "먹여", "마셨", "수유했", "줬", "주었"))
+    is_feeding_record_request = "기록해" in message and has_feeding_context
     is_spaced_feeding_action = "수유" in message and "했" in message
     # The reminder UI lets a caregiver reply with only an amount (for example
     # ``165ml``).  Treat that unambiguous, standalone input as a feeding record
     # too, while leaving questions such as "165ml 먹어도 돼?" as guidance.
     is_amount_only = re.fullmatch(r"\s*[-+]?(?:\d{1,3}|[일이삼사오육칠팔구영공십백]+)\s*(?:ml|밀리(?:리터)?)\s*", message, re.IGNORECASE)
-    if not is_feeding_action and not is_spaced_feeding_action and not is_amount_only:
+    if not is_feeding_action and not is_feeding_record_request and not is_spaced_feeding_action and not is_amount_only:
         return None
     amounts = _extract_amounts_ml(message)
     if amounts is None:
@@ -334,15 +336,29 @@ def _diaper_record(message: str) -> dict | None:
     compact = message.replace(" ", "")
     if not any(word in compact for word in ("봤", "쌌", "했", "기록", "방금")):
         return None
-    urine = any(word in compact for word in ("소변", "오줌", "쉬했", "쉬쌌"))
-    stool = any(word in compact for word in ("대변", "응가", "똥"))
-    if not urine and not stool:
+
+    def mentioned_without_negation(words: tuple[str, ...]) -> tuple[bool, bool]:
+        mentioned = False
+        positive = False
+        negation = re.compile(
+            r"^(?:은|는|이|가|을|를|도)?(?:안(?:했|봤|쌌|나왔)|(?:보|싸|하)지않|없)"
+        )
+        for word in words:
+            for match in re.finditer(re.escape(word), compact):
+                mentioned = True
+                if negation.match(compact[match.end():match.end() + 12]) is None:
+                    positive = True
+        return mentioned, positive
+
+    urine_mentioned, urine = mentioned_without_negation(("소변", "오줌", "쉬"))
+    stool_mentioned, stool = mentioned_without_negation(("대변", "응가", "똥"))
+    if not urine_mentioned and not stool_mentioned:
         return None
     return {"urine": urine, "stool": stool}
 
 
 def _sleep_record(message: str) -> dict | None:
-    """수면 시간까지 말한 채팅 문장을 완료 수면 기록으로 변환합니다."""
+    """수면 시간 또는 명시적인 시작·종료 동작을 기록으로 변환합니다."""
     compact = message.replace(" ", "")
     if not any(word in compact for word in ("수면", "낮잠", "잤어", "잠잤")):
         return None
@@ -358,7 +374,11 @@ def _sleep_record(message: str) -> dict | None:
     elif minute_match:
         duration_minutes = int(minute_match.group(1))
     else:
-        return {"missing": True}
+        starts_sleep = any(word in compact for word in ("수면시작", "잠들었", "잠들었어", "재웠어"))
+        ends_sleep = any(word in compact for word in ("수면종료", "잠에서깼", "일어났어", "기상했"))
+        if starts_sleep == ends_sleep:
+            return {"missing": True}
+        return {"action": "start" if starts_sleep else "end"}
 
     if not 1 <= duration_minutes <= 720:
         return {"missing": True}
@@ -462,7 +482,10 @@ async def _handle_care_request(request, baby: Baby) -> dict | None:
             **({"recorded_at": recorded_at} if recorded_at else {}),
         })
         if not result.get("success"):
-            raise RuntimeError(result.get("message", "수유 기록을 저장하지 못했습니다."))
+            return _text_response(
+                result.get("message", "수유 기록을 저장하지 못했습니다."),
+                response_type="clarification_required",
+            )
         return _text_response(result.get("message", f"수유 {record['amount_ml']}ml를 기록했습니다."), response_type="record_confirmation")
 
     diaper = _diaper_record(message)
@@ -476,7 +499,10 @@ async def _handle_care_request(request, baby: Baby) -> dict | None:
             **({"recorded_at": recorded_at} if recorded_at else {}),
         })
         if not result.get("success"):
-            raise RuntimeError(result.get("message", "기저귀 기록을 저장하지 못했습니다."))
+            return _text_response(
+                result.get("message", "기저귀 기록을 저장하지 못했습니다."),
+                response_type="clarification_required",
+            )
         diaper_kind = "소변·대변" if diaper["urine"] and diaper["stool"] else "소변" if diaper["urine"] else "대변"
         return _text_response(result.get("message", f"기저귀 {diaper_kind} 기록을 저장했습니다."), response_type="record_confirmation")
 
@@ -493,10 +519,18 @@ async def _handle_care_request(request, baby: Baby) -> dict | None:
             **({"recorded_at": recorded_at} if recorded_at else {}),
         })
         if not result.get("success"):
-            raise RuntimeError(result.get("message", "수면 기록을 저장하지 못했습니다."))
-        hours, minutes = divmod(sleep["duration_minutes"], 60)
-        duration_label = f"{hours}시간" + (f" {minutes}분" if minutes else "")
-        return _text_response(result.get("message", f"수면 {duration_label}을 기록했습니다."), response_type="record_confirmation")
+            return _text_response(
+                result.get("message", "수면 기록을 저장하지 못했습니다."),
+                response_type="clarification_required",
+            )
+        if "duration_minutes" in sleep:
+            hours, minutes = divmod(sleep["duration_minutes"], 60)
+            duration_label = f"{hours}시간" + (f" {minutes}분" if minutes else "")
+            fallback_message = f"수면 {duration_label}을 기록했습니다."
+        else:
+            action_label = "시작" if sleep["action"] == "start" else "종료"
+            fallback_message = f"수면 {action_label}를 기록했습니다."
+        return _text_response(result.get("message", fallback_message), response_type="record_confirmation")
     return None
 
 

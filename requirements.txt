@@ -17,7 +17,6 @@ Pillow
 PyYAML
 pypdf>=5,<7
 fonttools>=4,<5
-mcp
-fastmcp
+mcp[cli]>=1.0,<2.0
 pytest
 pytest-asyncio

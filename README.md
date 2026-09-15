@@ -292,11 +292,35 @@ ai-baby-care-team-project/
 - [x] pgvector 및 RAG 테이블 초기화 연결
 - [x] Registry 이미지 실행용 `compose.release.yml` 구성
 - [x] GitHub Actions를 통한 Backend·Frontend 이미지 자동 빌드 및 GHCR 배포 구성
+- [x] MCP Python SDK 1.x 버전 고정으로 서버·클라이언트 실행 환경 재현성 확보
+- [x] Agent 자연어 기록 파싱과 MCP 저장 검증 연결 보강
+
+### 자연어 육아 기록 검증 보강
+
+> 아래 내용은 **팀 프로젝트 종료 후 개인적으로 추가 개발한 영역**입니다.
+
+Agent가 자연어를 MCP Tool 인자로 변환하는 과정과 저장 서비스의 최종 검증이 일관되게
+동작하도록 호출 흐름을 점검하고 보강했습니다.
+
+```text
+사용자 자연어 → Agent 기록 유형·값 해석 → record_care_event
+              → Baby Care MCP 검증 → Repository → PostgreSQL
+```
+
+- 수유 문맥이 없는 일반적인 `기록해줘` 표현을 수유 요청으로 잘못 판단하지 않도록 개선
+- 수면 시작·종료 표현을 `event_type=sleep`, `action=start/end`로 전달
+- 소변·대변의 부정 표현을 보존해 `urine=False`, `stool=False`로 전달
+- 소변과 대변이 모두 `False`인 기록은 MCP 서비스에서 최종 저장 거부
+- 열린 수면 시작 기록 없이 종료하면 `SLEEP_START_NOT_FOUND` 안내 반환
+- 정상 수유, 잘못된 수면 종료, 잘못된 기저귀 기록에 대한 Agent 회귀 테스트 추가
+
+Agent가 잘못된 값을 만들 가능성에 대비해 검증 책임을 Agent에만 두지 않고, 기존
+`care_service.py`가 저장 직전 최종 방어 계층으로 동작하는 구조를 유지했습니다.
 
 ### 향후 개인 개선 계획
 
 - [ ] Baby Care MCP Server 구조 리팩터링
-- [ ] MCP Tool 테스트 보강
+- [ ] MCP Tool 통합 테스트 범위 확대
 - [ ] 예외 처리 및 Logging 개선
 - [ ] RAG 검색 품질 평가
 - [ ] Agent Workflow 개선
