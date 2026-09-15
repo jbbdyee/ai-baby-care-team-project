@@ -389,6 +389,10 @@ GHCR 패키지가 비공개라면 먼저 `docker login ghcr.io`가 필요합니�
 다른 사람이 바로 실행하게 하려면 GitHub 패키지 설정에서 두 이미지를 공개로 전환합니다.
 실제 API Key가 들어 있는 `.env` 파일은 이미지나 저장소에 포함하지 않습니다.
 
+팀 프로젝트 종료 후 개인적으로 구성한 최소 실행 전달본은
+[baby-care-assistant-friend-package.zip](deliverables/baby-care-assistant-friend-package.zip)에서
+받을 수 있습니다. 전달본의 환경 파일에는 실제 API Key가 포함되어 있지 않습니다.
+
 향후 실제 개선이 완료되면 해당 항목을 체크하고 관련 Issue·PR·구현 내용을 함께 기록할 예정입니다.
 
 ---

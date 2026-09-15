@@ -25,3 +25,6 @@ htmlcov/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Extracted copies of generated delivery packages
+/deliverables/*/
