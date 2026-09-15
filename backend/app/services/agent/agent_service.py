@@ -510,14 +510,18 @@ async def _handle_care_request(request, baby: Baby) -> dict | None:
     if sleep is not None:
         if sleep.get("missing"):
             return _text_response("수면 기록에는 시간이 필요해요. 예: ‘낮잠 1시간 30분 잤어’라고 입력해 주세요.", response_type="clarification_required")
-        result = await record_care_event({
+        sleep_arguments = {
             "baby_id": request.baby_id,
             "event_type": "sleep",
             "input_source": "text",
-            "duration_minutes": sleep["duration_minutes"],
             "idempotency_key": f"chat-{request.session_id}-{uuid4()}",
             **({"recorded_at": recorded_at} if recorded_at else {}),
-        })
+        }
+        if "duration_minutes" in sleep:
+            sleep_arguments["duration_minutes"] = sleep["duration_minutes"]
+        else:
+            sleep_arguments["action"] = sleep["action"]
+        result = await record_care_event(sleep_arguments)
         if not result.get("success"):
             return _text_response(
                 result.get("message", "수면 기록을 저장하지 못했습니다."),
