@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import streamlit as st
 
 import api
@@ -9,7 +11,10 @@ def render() -> None:
     left, right = st.columns([1.05, 2.1], gap="large")
     with left:
         st.markdown("<br>", unsafe_allow_html=True)
-        st.markdown("### 🫧 &nbsp; AI Baby Care")
+        st.image(
+            Path(__file__).resolve().parents[1] / "assets" / "bebeon-logo.png",
+            width=260,
+        )
         st.markdown("<br>", unsafe_allow_html=True)
         st.markdown("## 반가워요 👋")
         st.caption("AI 육아 도우미를 시작해 보세요.")

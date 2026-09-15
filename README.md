@@ -1,4 +1,6 @@
-# 👶 AI Baby Care Assistant
+![베베온 배너](assets/ai-baby-care-banner.png)
+
+# 베베온 (AI Baby Care Assistant)
 
 > **Single Agent + MCP + RAG 기반 맞춤형 육아 지원 서비스**
 
